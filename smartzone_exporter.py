@@ -23,65 +23,68 @@ from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily, REGIS
 
 class SmartZoneCollector():
 
-    # Initialize the class and specify required argument with no default value
-    # When defining class methods, must explicitly list `self` as first argument
     def __init__(self, target, user, password, insecure):
-        # Strip any trailing "/" characters from the provided url
-        self._target = target.rstrip("/")
-        # Take these arguments as provided, no changes needed
-        self._user = user
-        self._password = password
-        self._insecure = insecure
+        """
+        Initializes a Session and tries to verify if already authenticated.
+        Otherwise, logs in with provided credentials.
+        """
+        self._target = target.rstrip("/") + "/"  # ensure trailing slash for URL construction
+        self.vsz_session = requests.Session()
+        self.vsz_api_ver = "v5_0"                # API version
+        self.vsz_session_timeout = 4             # API session timeout in seconds
 
-        self._headers = None
-        self._statuses = None
+        # If SSL verification is disabled, set verify to False and disable warnings.
+        if not insecure:
+            requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+            self.vsz_session.verify = False
+        else:
+            self.vsz_session.verify = True
 
-        # With the exception of uptime, all of these metrics are strings
-        # Following the example of node_exporter, we'll set these string metrics with a default value of 1
+        try:
+            # Check if session cookie is still valid
+            resp = self.vsz_session.get(
+                f'{self._target}wsg/api/public/{self.vsz_api_ver}/session',
+                timeout=self.vsz_session_timeout
+            )
 
-    def get_session(self):
-        # Disable insecure request warnings if SSL verification is disabled
-        if self._insecure == False:
-             requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-
-        # Session object used to keep persistent cookies and connection pooling
-        s = requests.Session()
-
-        # Set `verify` variable to enable or disable SSL checking
-        # Use string method format methods to create new string with inserted value (in this case, the URL)
-        s.get('{}/wsg/api/public/v5_0/session'.format(self._target), verify=self._insecure)
-
-        # Define URL arguments as a dictionary of strings 'payload'
-        payload = {'username': self._user, 'password': self._password}
-
-        # Call the payload using the json parameter
-        r = s.post('{}/wsg/api/public/v5_0/session'.format(self._target), json=payload, verify=self._insecure)
-
-        # Raise bad requests
-        r.raise_for_status()
-
-        # Create a dictionary from the cookie name-value pair, then get the value based on the JSESSIONID key
-        session_id = r.cookies.get_dict().get('JSESSIONID')
-
-        # Add HTTP headers for all requests EXCEPT logon API
-        # Integrate the session ID into the header
-        self._headers = {'Content-Type': 'application/json;charset=UTF-8', 'Cookie': 'JSESSIONID={}'.format(session_id)}
-
+            if not resp.ok:
+                # If not valid, log in
+                credentials = {
+                    'username': user,
+                    'password': password
+                }
+                login_resp = self.vsz_session.post(
+                    f'{self._target}wsg/api/public/{self.vsz_api_ver}/session',
+                    json=credentials,
+                    timeout=self.vsz_session_timeout
+                )
+                login_resp.raise_for_status()
+                # Update session headers (this header will be sent on all subsequent requests)
+                self.vsz_session.headers.update({
+                    'Content-Type': 'application/json;charset=UTF-8'
+                })
+        except requests.exceptions.RequestException as err:
+            print(f"Failed to initialize SmartZone session: {err}")
 
     def get_metrics(self, metrics, api_path):
-        # Add the individual URL paths for the API call
+        # Save the metric names for later use in collect()
         self._statuses = list(metrics.keys())
         if 'query' in api_path:
-            # For APs, use POST and API query to reduce number of requests and improve performance
+            # For APs, use POST and API query to reduce the number of requests and improve performance
             # To-do: set dynamic AP limit based on SmartZone inventory
             raw = {'page': 0, 'start': 0, 'limit': 1000}
-            r = requests.post('{}/wsg/api/public/v5_0/{}'.format(self._target, api_path), json=raw, headers=self._headers, verify=self._insecure)
+            r = self.vsz_session.post(
+                f'{self._target}wsg/api/public/{self.vsz_api_ver}/{api_path}',
+                json=raw,
+                timeout=self.vsz_session_timeout
+            )
         else:
-            r = requests.get('{}/wsg/api/public/v5_0/{}'.format(self._target, api_path), headers=self._headers, verify=self._insecure)
+            r = self.vsz_session.get(
+                f'{self._target}wsg/api/public/{self.vsz_api_ver}/{api_path}',
+                timeout=self.vsz_session_timeout
+            )
 
-        result = json.loads(r.text)
-        return result
-
+        return r.json()
 
     def collect(self):
 
@@ -165,8 +168,6 @@ class SmartZoneCollector():
                 'AP status',
                 labels=["zone","ap_group","mac","name","status","lat","long"])
                 }
-
-        self.get_session()
 
         # Get SmartZone controller metrics
         for c in self.get_metrics(controller_metrics, 'controller')['list']:
