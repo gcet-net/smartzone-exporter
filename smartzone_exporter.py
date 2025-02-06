@@ -199,12 +199,9 @@ class SmartZoneCollector():
         # Get SmartZone AP metrics
         # Generate the metrics based on the values
         for ap in self.get_metrics(ap_metrics, 'query/ap')['list']:
-            try:
-                lat = ap.get('deviceGps').split(',')[0]
-                long = ap.get('deviceGps').split(',')[1]
-            except IndexError:
-                lat = 'none'
-                long = 'none'
+            gps = ap.get('deviceGps')
+            lat, long = (gps.split(',')[0], gps.split(',')[1]) if gps and ',' in gps else ('none', 'none')
+
             for s in self._statuses:
                 # 'Status' is a string value only, so we can't export the default value
                 if s == 'status':
