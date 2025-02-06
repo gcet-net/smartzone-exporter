@@ -48,7 +48,7 @@ This exporter has been tested on the following versions:
 
 ## Installation
 ```
-git clone https://github.com/ddericco/smartzone_exporter.git
+git clone https://github.com/gcet-net/smartzone-exporter.git
 cd smartzone_exporter
-pipenv install
+pip install .
 ```
