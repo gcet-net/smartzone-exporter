@@ -242,21 +242,27 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    args = parse_args()
+    port = args.port
+
+    # Initialize and register the collector
+    collector = SmartZoneCollector(args.target, args.user, args.password, args.insecure)
+    REGISTRY.register(collector)
+
+    # Start the HTTP server for Prometheus to scrape
+    start_http_server(port)
+
+    if not args.insecure:
+        print(f"WARNING: Connection to {args.target} may not be secure.")
+    print(f"Polling {args.target}. Listening on :::{port}")
+
     try:
-        args = parse_args()
-        port = int(args.port)
-        REGISTRY.register(SmartZoneCollector(args.target, args.user, args.password, args.insecure))
-        # Start HTTP server on specified port
-        start_http_server(port)
-        if args.insecure == False:
-             print('WARNING: Connection to {} may not be secure.'.format(args.target))
-        print("Polling {}. Listening on ::{}".format(args.target, port))
+        # Keep the process alive; metrics collection is triggered by scrape requests
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print(" Keyboard interrupt, exiting...")
+        print("Keyboard interrupt, exiting...")
         exit(0)
-
 
 if __name__ == "__main__":
     main()
