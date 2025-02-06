@@ -1,22 +1,10 @@
-# requests used to fetch API data
-import requests
-
-# Allow for silencing insecure warnings from requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-
-# Builtin JSON module for testing - might not need later
-import json
-
-# Needed for sleep and exporter start/end time metrics
+import argparse
 import time
 
-# argparse module used for providing command-line interface
-import argparse
-
-# Prometheus modules for HTTP server & metrics
-from prometheus_client import start_http_server, Summary
-from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily, REGISTRY
-
+import requests
+from prometheus_client import Summary, start_http_server
+from prometheus_client.core import REGISTRY, CounterMetricFamily, GaugeMetricFamily
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 # Create SmartZoneCollector as a class - in Python3, classes inherit object as a base class
 # Only need to specify for compatibility or in Python2
