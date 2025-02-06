@@ -213,26 +213,32 @@ class SmartZoneCollector():
         for m in ap_metrics.values():
             yield m
 
-
-# Function to parse command line arguments and pass them to the collector
 def parse_args():
-    parser = argparse.ArgumentParser(description='Ruckus SmartZone exporter for Prometheus')
+    """
+    Parse command-line arguments for the Ruckus SmartZone exporter.
 
-    # Use add_argument() method to specify options
-    # By default argparse will treat any arguments with flags (- or --) as optional
-    # Rather than make these required (considered bad form), we can create another group for required options
-    required_named = parser.add_argument_group('required named arguments')
-    required_named.add_argument('-u', '--user', help='SmartZone API user', required=True)
-    required_named.add_argument('-p', '--password', help='SmartZone API password', required=True)
-    required_named.add_argument('-t', '--target', help='Target URL and port to access SmartZone, e.g. https://smartzone.example.com:8443', required=True)
+    Returns:
+        argparse.Namespace: The parsed command-line arguments.
+    """
+    parser = argparse.ArgumentParser(
+        description='Ruckus SmartZone exporter for Prometheus'
+    )
+    # Required arguments
+    req = parser.add_argument_group('required named arguments')
+    req.add_argument('-u', '--user', required=True, help='SmartZone API user')
+    req.add_argument('-p', '--password', required=True, help='SmartZone API password')
+    req.add_argument('-t', '--target', required=True,
+        help='Target URL and port to access SmartZone (e.g. https://smartzone.example.com:8443)'
+    )
 
-    # Add store_false action to store true/false values, and set a default of True
-    parser.add_argument('--insecure', action='store_false', help='Allow insecure SSL connections to Smartzone')
+    # Optional arguments
+    parser.add_argument('--insecure', action='store_false',
+        help='Allow insecure SSL connections to SmartZone'
+    )
+    parser.add_argument('--port', type=int, default=9345,
+        help='Port on which to expose metrics and web interface (default: 9345)'
+    )
 
-    # Specify integer type for the listening port
-    parser.add_argument('--port', type=int, default=9345, help='Port on which to expose metrics and web interface (default=9345)')
-
-    # Now that we've added the arguments, parse them and return the values as output
     return parser.parse_args()
 
 def main():
