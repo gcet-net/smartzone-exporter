@@ -1,4 +1,5 @@
 import argparse
+import logging
 import time
 
 import requests
@@ -6,76 +7,165 @@ from prometheus_client import Summary, start_http_server
 from prometheus_client.core import REGISTRY, CounterMetricFamily, GaugeMetricFamily
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
-# Create SmartZoneCollector as a class - in Python3, classes inherit object as a base class
-# Only need to specify for compatibility or in Python2
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-class SmartZoneCollector():
+
+class SmartZoneCollector:
 
     def __init__(self, target, user, password, insecure):
-        """
-        Initializes a Session and tries to verify if already authenticated.
-        Otherwise, logs in with provided credentials.
-        """
-        self._target = target.rstrip("/") + "/"  # ensure trailing slash for URL construction
-        self.vsz_session = requests.Session()
-        self.vsz_api_ver = "v5_0"                # API version
-        self.vsz_session_timeout = 4             # API session timeout in seconds
+        self.vsz_api_url = target.rstrip("/") + "/"  # ensure trailing slash for URL construction
+        self.vsz_api_user = user
+        self.vsz_api_password = password
+        self.vsz_api_ver = "v5_0"                    # API version maybe this should be passed as an arg?
+        self.vsz_api_session = requests.Session()
+        self.vsz_api_session_timeout = 4             # API session timeout in seconds
 
         # If SSL verification is disabled, set verify to False and disable warnings.
         if not insecure:
             requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-            self.vsz_session.verify = False
-        else:
-            self.vsz_session.verify = True
+            self.vsz_api_session.verify = False
+            logger.warning(f"Connection to {self.vsz_api_url} may not be secure.")
 
+        else:
+            self.vsz_api_session.verify = True
+
+        # Initialize the session.
+        self.ensure_authenticated()
+
+    def ensure_authenticated(self):
+        """
+        Checks if the session is still authenticated. If not, re-logins.
+        """
         try:
             # Check if session cookie is still valid
-            resp = self.vsz_session.get(
-                f'{self._target}wsg/api/public/{self.vsz_api_ver}/session',
-                timeout=self.vsz_session_timeout
+            resp = self.vsz_api_session.get(
+                f'{self.vsz_api_url}wsg/api/public/{self.vsz_api_ver}/session',
+                timeout=self.vsz_api_session_timeout
             )
 
             if not resp.ok:
                 # If not valid, log in
                 credentials = {
-                    'username': user,
-                    'password': password
+                    'username': self.vsz_api_user,
+                    'password': self.vsz_api_password
                 }
-                login_resp = self.vsz_session.post(
-                    f'{self._target}wsg/api/public/{self.vsz_api_ver}/session',
+                login_resp = self.vsz_api_session.post(
+                    f'{self.vsz_api_url}wsg/api/public/{self.vsz_api_ver}/session',
                     json=credentials,
-                    timeout=self.vsz_session_timeout
+                    timeout=self.vsz_api_session_timeout
                 )
                 login_resp.raise_for_status()
                 # Update session headers (this header will be sent on all subsequent requests)
-                self.vsz_session.headers.update({
+                self.vsz_api_session.headers.update({
                     'Content-Type': 'application/json;charset=UTF-8'
                 })
         except requests.exceptions.RequestException as err:
-            print(f"Failed to initialize SmartZone session: {err}")
+            logger.error(f"Failed to initialize SmartZone session: {err}")
 
-    def get_metrics(self, metrics, api_path):
-        # Save the metric names for later use in collect()
-        self._statuses = list(metrics.keys())
-        if 'query' in api_path:
+    def get_controller(self):
+        """
+        Retrieve controller data from the SmartZone API.
+
+        Returns:
+            list: A list of system records, or an empty list if none are found.
+        """
+        self.ensure_authenticated()
+        try:
+            api_url = f"{self.vsz_api_url}wsg/api/public/{self.vsz_api_ver}/controller"
+            r = self.vsz_api_session.get(api_url, timeout=self.vsz_api_session_timeout)
+            r.raise_for_status()
+            data = r.json()
+            # If the response is a dict and contains a 'list' key, return that.
+            if isinstance(data, dict):
+                return data.get('list', [])
+            # If the response is already a list, return it.
+            elif isinstance(data, list):
+                return data
+            else:
+                return []
+        except requests.exceptions.RequestException as err:
+            logger.error(f"Retrieving controller data: {err}")
+            return []
+
+    def get_zones(self):
+        """
+        Retrieve AP Zone data via SmartZone API.
+
+        Returns:
+            list: A list of zone records, or an empty list if none are found.
+        """
+        try:
+            api_url = f"{self.vsz_api_url}wsg/api/public/{self.vsz_api_ver}/system/inventory"
+            r = self.vsz_api_session.get(api_url, timeout=self.vsz_api_session_timeout)
+            r.raise_for_status()
+            data = r.json()
+            # If the response is a dict and contains a 'list' key, return that.
+            if isinstance(data, dict):
+                return data.get('list', [])
+            # If the response is already a list, return it.
+            elif isinstance(data, list):
+                return data
+            else:
+                return []
+        except requests.exceptions.RequestException as err:
+            logger.error(f"Retrieving AP zone data: {err}")
+            return []
+
+    def get_aps(self):
+        """
+        Retrieve AP data via SmartZone API.
+
+        Returns:
+            list: A list of AP records, or an empty list if none are found or an error occurs.
+        """
+        try:
             # For APs, use POST and API query to reduce the number of requests and improve performance
             # To-do: set dynamic AP limit based on SmartZone inventory
-            raw = {'page': 0, 'start': 0, 'limit': 1000}
-            r = self.vsz_session.post(
-                f'{self._target}wsg/api/public/{self.vsz_api_ver}/{api_path}',
-                json=raw,
-                timeout=self.vsz_session_timeout
-            )
-        else:
-            r = self.vsz_session.get(
-                f'{self._target}wsg/api/public/{self.vsz_api_ver}/{api_path}',
-                timeout=self.vsz_session_timeout
-            )
+            query_payload =  {'page': 0, 'start': 0, 'limit': 1000}
+            api_url = f"{self.vsz_api_url}wsg/api/public/{self.vsz_api_ver}/query/ap"
 
-        return r.json()
+            r = self.vsz_api_session.post(api_url, json=query_payload, timeout=self.vsz_api_session_timeout)
+            r.raise_for_status()
+
+            data = r.json()
+            # If the response is a dict and contains a 'list' key, return that.
+            if isinstance(data, dict):
+                return data.get('list', [])
+            # If the response is already a list, return it.
+            elif isinstance(data, list):
+                return data
+            else:
+                return []
+        except requests.exceptions.RequestException as err:
+            logger.error(f"Retrieving AP data: {err}")
+            return []
 
     def collect(self):
+        """
+        Collect metrics from SmartZone controller
 
+        This method fetches data from the SmartZone API and processes it to generate
+        Prometheus metric families for the following categories:
+
+        1. Controller Metrics:
+            - Retrieves controller information (e.g., model, serial number, uptime,
+              hostname, version, and AP firmware version).
+        2. AP Zones Metrics:
+            - Retrieves zone inventory, which includes metrics such as total APs,
+              APs in discovery state, connected APs, disconnected APs, rebooting APs,
+              and total connected clients.
+        3. AP Metrics:
+            - Retrieves AP-specific data such as alerts, latencies (for both 2.4G and 5G),
+              connected client counts for each band, and AP status.
+            - The AP status metric is broken out into sub-metrics for each state (Online,
+              Offline, and Flagged).
+        """
+        # Controller Metrics
+        controllers = self.get_controller()
         controller_metrics = {
             'model':
                 GaugeMetricFamily('smartzone_controller_model',
@@ -101,8 +191,24 @@ class SmartZoneCollector():
                 GaugeMetricFamily('smartzone_controller_ap_firmware_version',
                 'Firmware version on controller APs',
                 labels=["id", "apVersion"])
-                }
+        }
 
+        for controller in controllers:
+            controller_id = controller.get('id')
+            # Iterate directly over the keys in controller_metrics
+            for key in controller_metrics.keys():
+                if key == 'uptimeInSec':
+                    controller_metrics[key].add_metric([controller_id], controller.get(key, 0))
+                else:
+                    # For non-numeric or string-only metrics, export a dummy value (1) with the extra info
+                    extra = controller.get(key, 'unknown')
+                    controller_metrics[key].add_metric([controller_id, extra], 1)
+
+        for m in controller_metrics.values():
+            yield m
+
+        # AP Zones Metrics
+        zones = self.get_zones()
         zone_metrics = {
             'totalAPs':
                 GaugeMetricFamily('smartzone_zone_total_aps',
@@ -128,8 +234,23 @@ class SmartZoneCollector():
                 GaugeMetricFamily('smartzone_zone_total_connected_clients',
                 'Total number of connected clients in zone',
                 labels=["zone_name","zone_id"])
-                }
+        }
 
+        for zone in zones:
+            # Get the zone name and zone ID for labeling purposes
+            zone_name = zone.get('zoneName', 'unknown')
+            zone_id = zone.get('zoneId', 'unknown')
+
+            # Iterate over the keys defined in zone_metrics
+            for key in zone_metrics.keys():
+                # Use the zone data for the corresponding metric key
+                zone_metrics[key].add_metric([zone_name, zone_id], zone.get(key, 0))
+
+        for m in zone_metrics.values():
+            yield m
+
+        # AP Metrics
+        aps = self.get_aps()
         ap_metrics = {
             'alerts':
                 GaugeMetricFamily('smartzone_ap_alerts',
@@ -154,61 +275,44 @@ class SmartZoneCollector():
             'status':
                 GaugeMetricFamily('smartzone_ap_status',
                 'AP status',
-                labels=["zone","ap_group","mac","name","status","lat","long"])
-                }
+                labels=["zone","ap_group","mac","name","status","lat","long"]),
+        }
 
-        # Get SmartZone controller metrics
-        for c in self.get_metrics(controller_metrics, 'controller')['list']:
-            id = c['id']
-            for s in self._statuses:
-                if s == 'uptimeInSec':
-                     controller_metrics[s].add_metric([id], c.get(s))
-                # Export a dummy value for string-only metrics
-                else:
-                     extra = c[s]
-                     controller_metrics[s].add_metric([id, extra], 1)
-
-        for m in controller_metrics.values():
-            yield m
-
-        # Get SmartZone inventory per zone
-        # For each zone captured from the query:
-        # - Grab the zone name and zone ID for labeling purposes
-        # - Loop through the statuses in statuses
-        # - For each status, get the value for the status in each zone and add to the metric
-        for zone in self.get_metrics(zone_metrics, 'system/inventory')['list']:
-            zone_name = zone['zoneName']
-            zone_id = zone['zoneId']
-            for s in self._statuses:
-                zone_metrics[s].add_metric([zone_name, zone_id], zone.get(s))
-
-        for m in zone_metrics.values():
-            yield m
-
-        # Get SmartZone AP metrics
-        # Generate the metrics based on the values
-        for ap in self.get_metrics(ap_metrics, 'query/ap')['list']:
+        for ap in aps:
+            # Get deviceGps and format it for labeling purposes
             gps = ap.get('deviceGps')
             lat, long = (gps.split(',')[0], gps.split(',')[1]) if gps and ',' in gps else ('none', 'none')
 
-            for s in self._statuses:
-                # 'Status' is a string value only, so we can't export the default value
-                if s == 'status':
-                    state_name = ['Online','Offline','Flagged']
-                    # By default set value to 0 and increase to 1 to reflect current state
-                    # Similar to how node_exporter handles systemd states
-                    for n in state_name:
-                        value = 0
-                        if ap.get(s) == str(n):
-                            value = 1
-                        # Wrap the zone and group names in str() to avoid issues with None values at export time
-                        ap_metrics[s].add_metric([str(ap['zoneName']), str(ap['apGroupName']), ap['apMac'], ap['deviceName'], n, lat, long], value)
+            # Iterate over the keys defined in ap_metrics
+            for key in ap_metrics.keys():
+                if key == 'status':
+                    for state in ['Online', 'Offline', 'Flagged']:
+                        value = 1 if ap.get(key) == str(state) else 0
+                        ap_metrics[key].add_metric(
+                            [
+                                str(ap.get('zoneName', 'unknown')),
+                                str(ap.get('apGroupName', 'unknown')),
+                                ap.get('apMac', 'unknown'),
+                                ap.get('deviceName', 'unknown'),
+                                state,
+                                lat,
+                                long
+                            ],
+                            value
+                        )
                 else:
-                    if ap.get(s) is not None:
-                        ap_metrics[s].add_metric([str(ap['zoneName']), str(ap['apGroupName']), ap['apMac'], ap['deviceName'], lat, long], ap.get(s))
-                    # Return 0 for metrics with values of None
-                    else:
-                        ap_metrics[s].add_metric([str(ap['zoneName']), str(ap['apGroupName']), ap['apMac'], ap['deviceName'], lat, long], 0)
+                    # For non-status metrics, if the value is missing, default to 0.
+                    value = ap.get(key) if ap.get(key) is not None else 0
+                    ap_metrics[key].add_metric(
+                        [
+                            str(ap.get('zoneName', 'unknown')),
+                            str(ap.get('apGroupName', 'unknown')),
+                            ap.get('apMac', 'unknown'),
+                            ap.get('deviceName', 'unknown'),
+                            lat, long
+                        ],
+                        value
+                    )
 
         for m in ap_metrics.values():
             yield m
@@ -252,16 +356,14 @@ def main():
     # Start the HTTP server for Prometheus to scrape
     start_http_server(port)
 
-    if not args.insecure:
-        print(f"WARNING: Connection to {args.target} may not be secure.")
-    print(f"Polling {args.target}. Listening on :::{port}")
+    logger.info(f"Polling {args.target}. Listening on :::{port}")
 
     try:
         # Keep the process alive; metrics collection is triggered by scrape requests
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("Keyboard interrupt, exiting...")
+        logger.info("Keyboard interrupt, exiting...")
         exit(0)
 
 if __name__ == "__main__":
