@@ -1,0 +1,25 @@
+[Unit]
+Description=SmartZone Exporter
+Documentation=https://github.com/gcet-net/smartzone-exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+User=prometheus
+Group=prometheus
+WorkingDirectory=/opt/smartzone_exporter
+
+ExecStart=/opt/smartzone_exporter/venv/bin/python /opt/smartzone_exporter/smartzone_exporter.py \
+    --user jimmy \
+    --password jangles \
+    --target https://ruckus.jjangles.com:8443 \
+    --port 9345
+
+Restart=on-failure
+RestartSec=30
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
