@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "smartzone-exporter"
-version = "1.0.0"
+version = "1.1.0"
 description = "Prometheus metrics exporter for Ruckus SmartZone appliances"
 authors = [
     { name = "Bill St.Denis" },
@@ -58,6 +58,7 @@ exclude = [
 
 [project.urls]
 Repository = "https://github.com/gcet-net/smartzone-exporter.git"
+Changelog = "https://github.com/gcet-net/smartzone-exporter/blob/master/CHANGELOG.md"
 
 [tool.ruff.format]
 quote-style = "single"

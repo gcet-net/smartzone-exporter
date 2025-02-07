@@ -209,31 +209,32 @@ class SmartZoneCollector:
 
         # AP Zones Metrics
         zones = self.get_zones()
+        zone_metrics_labels = ['zone_name', 'zone_id']
         zone_metrics = {
             'totalAPs':
                 GaugeMetricFamily('smartzone_zone_total_aps',
                 'Total number of APs in zone',
-                labels=["zone_name","zone_id"]),
+                labels=zone_metrics_labels),
             'discoveryAPs':
                 GaugeMetricFamily('smartzone_zone_discovery_aps',
                 'Number of zone APs in discovery state',
-                labels=["zone_name","zone_id"]),
+                labels=zone_metrics_labels),
             'connectedAPs':
                 GaugeMetricFamily('smartzone_zone_connected_aps',
                 'Number of connected zone APs',
-                labels=["zone_name","zone_id"]),
+                labels=zone_metrics_labels),
             'disconnectedAPs':
                 GaugeMetricFamily('smartzone_zone_disconnected_aps',
                 'Number of disconnected zone APs',
-                labels=["zone_name","zone_id"]),
+                labels=zone_metrics_labels),
             'rebootingAPs':
                 GaugeMetricFamily('smartzone_zone_rebooting_aps',
                 'Number of zone APs in rebooting state',
-                labels=["zone_name","zone_id"]),
+                labels=zone_metrics_labels),
             'clients':
                 GaugeMetricFamily('smartzone_zone_total_connected_clients',
                 'Total number of connected clients in zone',
-                labels=["zone_name","zone_id"])
+                labels=zone_metrics_labels)
         }
 
         for zone in zones:
@@ -251,31 +252,31 @@ class SmartZoneCollector:
 
         # AP Metrics
         aps = self.get_aps()
+        ap_metrics_labels = ['zone', 'ap_group', 'mac', 'serial', 'name', 'lat', 'long']
         ap_metrics = {
             'alerts':
                 GaugeMetricFamily('smartzone_ap_alerts',
                 'Number of AP alerts',
-                labels=["zone","ap_group","mac","name","lat","long"]),
+                labels=ap_metrics_labels),
             'latency24G':
                 GaugeMetricFamily('smartzone_ap_latency_24g_milliseconds',
                 'AP latency on 2.4G channels in milliseconds',
-                labels=["zone","ap_group","mac","name","lat","long"]),
+                labels=ap_metrics_labels),
             'latency50G':
                 GaugeMetricFamily('smartzone_ap_latency_5g_milliseconds',
                 'AP latency on 5G channels in milliseconds',
-                labels=["zone","ap_group","mac","name","lat","long"]),
+                labels=ap_metrics_labels),
             'numClients24G':
                 GaugeMetricFamily('smartzone_ap_connected_clients_24g',
                 'Number of clients connected to 2.4G channels on this AP',
-                labels=["zone","ap_group","mac","name","lat","long"]),
+                labels=ap_metrics_labels),
             'numClients5G':
                 GaugeMetricFamily('smartzone_ap_connected_clients_5g',
                 'Number of clients connected to 5G channels on this AP',
-                labels=["zone","ap_group","mac","name","lat","long"]),
-            'status':
-                GaugeMetricFamily('smartzone_ap_status',
+                labels=ap_metrics_labels),
+            'status': GaugeMetricFamily('smartzone_ap_status',
                 'AP status',
-                labels=["zone","ap_group","mac","name","status","lat","long"]),
+                labels=[*ap_metrics_labels, 'status']),
         }
 
         for ap in aps:
@@ -292,11 +293,12 @@ class SmartZoneCollector:
                             [
                                 str(ap.get('zoneName', 'unknown')),
                                 str(ap.get('apGroupName', 'unknown')),
-                                ap.get('apMac', 'unknown'),
-                                ap.get('deviceName', 'unknown'),
-                                state,
-                                lat,
-                                long
+                                str(ap.get('apMac', 'unknown')),
+                                str(ap.get('serial', 'unknown')),
+                                str(ap.get('deviceName', 'unknown')),
+                                str(lat),
+                                str(long),
+                                str(state)
                             ],
                             value
                         )
@@ -307,9 +309,11 @@ class SmartZoneCollector:
                         [
                             str(ap.get('zoneName', 'unknown')),
                             str(ap.get('apGroupName', 'unknown')),
-                            ap.get('apMac', 'unknown'),
-                            ap.get('deviceName', 'unknown'),
-                            lat, long
+                            str(ap.get('apMac', 'unknown')),
+                            str(ap.get('serial', 'unknown')),
+                            str(ap.get('deviceName', 'unknown')),
+                            str(lat),
+                            str(long)
                         ],
                         value
                     )
