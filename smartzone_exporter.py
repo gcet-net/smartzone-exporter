@@ -252,7 +252,7 @@ class SmartZoneCollector:
 
         # AP Metrics
         aps = self.get_aps()
-        ap_metrics_labels = ['zone', 'ap_group', 'mac', 'serial', 'name', 'lat', 'long']
+        ap_metrics_labels = ['zone', 'ap_group', 'mac', 'serial', 'name', 'latitude', 'longitude']
         ap_metrics = {
             'alerts':
                 GaugeMetricFamily('smartzone_ap_alerts',
@@ -282,7 +282,7 @@ class SmartZoneCollector:
         for ap in aps:
             # Get deviceGps and format it for labeling purposes
             gps = ap.get('deviceGps')
-            lat, long = (gps.split(',')[0], gps.split(',')[1]) if gps and ',' in gps else ('none', 'none')
+            latitude, longitude = (gps.split(',')[0], gps.split(',')[1]) if gps and ',' in gps else ('none', 'none')
 
             # Iterate over the keys defined in ap_metrics
             for key in ap_metrics.keys():
@@ -296,8 +296,8 @@ class SmartZoneCollector:
                                 str(ap.get('apMac', 'unknown')),
                                 str(ap.get('serial', 'unknown')),
                                 str(ap.get('deviceName', 'unknown')),
-                                str(lat),
-                                str(long),
+                                str(latitude),
+                                str(longitude),
                                 str(state)
                             ],
                             value
@@ -312,8 +312,8 @@ class SmartZoneCollector:
                             str(ap.get('apMac', 'unknown')),
                             str(ap.get('serial', 'unknown')),
                             str(ap.get('deviceName', 'unknown')),
-                            str(lat),
-                            str(long)
+                            str(latitude),
+                            str(longitude)
                         ],
                         value
                     )

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "smartzone-exporter"
-version = "1.1.0"
+version = "1.2.0"
 description = "Prometheus metrics exporter for Ruckus SmartZone appliances"
 authors = [
     { name = "Bill St.Denis" },
