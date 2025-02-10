@@ -14,8 +14,7 @@ license = { text = "MIT" }
 requires-python = ">=3.6,<4.0"
 dependencies = [
     "prometheus-client>=0.5.0",
-    "requests>=2.21.0",
-    "urllib3>=1.24.3"
+    "requests>=2.21.0"
 ]
 readme = "README.md"
 keywords = [
@@ -58,7 +57,7 @@ exclude = [
 
 [project.urls]
 Repository = "https://github.com/gcet-net/smartzone-exporter.git"
-Changelog = "https://github.com/gcet-net/smartzone-exporter/blob/master/CHANGELOG.md"
+Changelog = "https://github.com/gcet-net/smartzone-exporter/blob/main/CHANGELOG.md"
 
 [tool.ruff.format]
 quote-style = "single"
